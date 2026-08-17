@@ -308,7 +308,7 @@ const COPY = {
     s7NotBuilt:"None of this is built. There is no beta, no waitlist and no date.",
     s7Frame:"The CLI answers why two environments differ, right now. It structurally cannot answer when something changed, or who else has it. That is what a service would add.",
     ideas:[
-      ["History","Runner images change without telling anyone. Keeping snapshots over time turns silent drift into a dated event: CI moved from Node 22.11 to 22.12 on the 14th."],
+      ["History","Runner images change without telling anyone. Keeping snapshots over time turns silent drift into a dated event: CI moved from Node 22.11 to 22.12 on the 14th. Collection has already started — six GitHub-hosted images, captured daily into a public repository — so this idea gets tested against real drift rather than assumed.",["See what the runners contain today","https://runners.nyrvo.dev/"]],
       ["Environment bisect","The suite went red on the 14th. Here is every environment change between the last green run and the first red one."],
       ["Team baseline","Whether everyone is on the toolchain the project declares. Onboarding becomes one command instead of an afternoon. Environment variable values were never captured, so there is nothing to upload and nothing to leak."]
     ],
@@ -363,7 +363,7 @@ const COPY = {
     s7NotBuilt:"Nada disso está construído. Não há beta, não há lista de espera e não há data.",
     s7Frame:"O CLI responde por que dois ambientes diferem, agora. Ele estruturalmente não consegue responder quando algo mudou, nem quem mais tem aquilo. É isso que um serviço acrescentaria.",
     ideas:[
-      ["Histórico","Imagens de runner mudam sem avisar ninguém. Guardar snapshots ao longo do tempo transforma a deriva silenciosa em um evento com data: o CI passou de Node 22.11 para 22.12 no dia 14."],
+      ["Histórico","Imagens de runner mudam sem avisar ninguém. Guardar snapshots ao longo do tempo transforma a deriva silenciosa em um evento com data: o CI passou de Node 22.11 para 22.12 no dia 14. A coleta já começou — seis imagens do GitHub, capturadas diariamente em um repositório público — para que esta ideia seja testada contra deriva real, e não presumida.",["Veja o que os runners têm hoje","https://runners.nyrvo.dev/"]],
       ["Bisect de ambiente","A suíte ficou vermelha no dia 14. Aqui está toda mudança de ambiente entre a última execução verde e a primeira vermelha."],
       ["Baseline do time","Se todo mundo está na toolchain que o projeto declara. Onboarding vira um comando em vez de uma tarde. E os valores das variáveis de ambiente nunca foram capturados, então não há o que subir nem o que vazar."]
     ],
@@ -390,7 +390,10 @@ function render(lang) {
   ).join("");
 
   document.getElementById("ideasGrid").innerHTML = t.ideas.map(
-    ([title, body]) => `<div class="card"><p class="label">${title}</p><p style="margin:0;font-size:14px;line-height:1.6;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)">${body}</p></div>`
+    ([title, body, link]) => `<div class="card"><p class="label">${title}</p>` +
+      `<p style="margin:0;font-size:14px;line-height:1.6;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)">${body}</p>` +
+      (link ? `<p style="margin:4px 0 0;font-size:13px"><a href="${link[1]}">${link[0]} →</a></p>` : "")
+    + `</div>`
   ).join("");
 
   document.querySelector(`input[name="lang"][value="${lang}"]`).checked = true;
