@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nyrvo — your code is the same, your environment is not</title>
+<meta name="description" content="Nyrvo captures an execution environment as a small JSON snapshot, compares two of them, and reports what actually differs between your laptop and CI. Open source, MIT, one Go binary.">
+<link rel="canonical" href="https://nyrvo.dev/">
+<meta property="og:title" content="Nyrvo — your code is the same, your environment is not">
+<meta property="og:description" content="Capture an execution environment as a JSON snapshot, compare two of them, and see what actually differs between your laptop and CI.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nyrvo.dev/">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23161826'/%3E%3Crect x='4' y='4' width='8' height='8' rx='2' fill='%239184d9'/%3E%3C/svg%3E">
+<style>
+/*
+ * No webfonts, no icon CDN, no analytics, no cookies. A page arguing that
+ * Nyrvo sends nothing anywhere should not open third-party connections to
+ * render itself. The design system this was designed against loads Inter from
+ * Google Fonts; that import is deliberately not carried over, and a system
+ * stack is used instead.
+ */
+:root{
+  --color-bg:#161826;
+  --color-surface:#232532;
+  --color-text:#e9e9ed;
+  --color-accent:#9184d9;
+  --color-divider:color-mix(in srgb, #e9e9ed 16%, transparent);
+  --color-neutral-100:#f3f5fe;
+  --color-neutral-200:#e4e7f5;
+  --color-neutral-500:#9397ab;
+  --color-neutral-600:#75798c;
+  --color-neutral-900:#292b31;
+  --color-accent-300:#d2cefd;
+  --color-accent-700:#5d5294;
+  --radius-sm:4px;
+  --radius-md:8px;
+  --shadow-sm:0 0 0 1px #3f424d;
+  --font-body:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --term-dim:var(--color-neutral-500);
+  --term-key:var(--color-accent-300);
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --color-bg:var(--color-neutral-100);
+    --color-surface:var(--color-neutral-200);
+    --color-text:var(--color-neutral-900);
+    --color-accent:var(--color-accent-700);
+    --color-divider:color-mix(in srgb, #292b31 18%, transparent);
+    --shadow-sm:0 0 0 1px color-mix(in srgb, #292b31 14%, transparent);
+    --term-dim:var(--color-neutral-600);
+    --term-key:var(--color-accent-700);
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:15px;line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+h1,h2{font-weight:500;letter-spacing:-0.02em;line-height:1.12;margin:0}
+p{margin:0}
+a{color:var(--color-accent);text-underline-offset:3px}
+a:hover{color:color-mix(in srgb, var(--color-accent) 65%, var(--color-text))}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
+::selection{background:color-mix(in srgb, var(--color-accent) 30%, transparent)}
+.wrap{max-width:1080px;margin:0 auto;padding:56px 24px}
+.kicker{font-family:var(--font-mono);font-size:12px;color:var(--color-accent);margin:0 0 10px}
+h2{font-size:clamp(26px,3.6vw,34px)}
+.lede{margin:14px 0 28px;max-width:62ch;line-height:1.65;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 78%, transparent)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;text-decoration:none;font-weight:500;font-size:14px;line-height:1.2;color:var(--color-text);background:transparent;border:1px solid var(--color-divider);padding:6px 11px;border-radius:var(--radius-md);min-height:44px}
+.btn:hover{background:color-mix(in srgb, var(--color-text) 7%, transparent);color:var(--color-text)}
+.btn svg{display:block;flex:none}
+.card{display:flex;flex-direction:column;gap:8px;padding:20px 18px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)}
+.seg{display:inline-flex;overflow:visible;border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:2px;gap:2px;font-size:12px}
+.seg-opt{display:inline-flex;align-items:center;cursor:pointer}
+.seg-opt input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.seg-opt span{border-radius:5px;padding:5px 9px;display:block}
+.seg-opt:has(input:checked) span{color:var(--color-accent);box-shadow:inset 0 0 0 1px var(--color-accent)}
+.seg-opt:not(:has(input:checked)):hover span{background:color-mix(in srgb, var(--color-text) 7%, transparent)}
+.seg-opt:has(input:focus-visible) span{outline:2px solid var(--color-accent);outline-offset:-2px}
+.scrollx{overflow-x:auto;scrollbar-width:thin;scrollbar-color:color-mix(in srgb, var(--color-accent) 45%, transparent) transparent}
+.scrollx::-webkit-scrollbar{height:8px}
+.scrollx::-webkit-scrollbar-track{background:transparent}
+.scrollx::-webkit-scrollbar-thumb{background:color-mix(in srgb, var(--color-accent) 35%, transparent);border-radius:99px;border:2px solid transparent;background-clip:padding-box}
+.term{border:1px solid var(--color-divider);border-radius:var(--radius-md);background:var(--color-surface);overflow:hidden}
+.term-bar{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--color-divider);font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--term-dim)}
+.term pre{margin:0;font-family:var(--font-mono);font-size:13px;line-height:1.75;white-space:pre}
+.dim{color:var(--term-dim)}
+.key{color:var(--term-key)}
+.sev{letter-spacing:0.1em;font-weight:700;border-bottom:2px solid var(--color-accent);padding-bottom:2px}
+.navlink{text-decoration:none;color:var(--color-text);opacity:.7;padding-bottom:2px;border-bottom:1px solid transparent;transition:opacity .15s,border-color .15s}
+.navlink:hover{opacity:1;color:var(--color-text);border-bottom-color:var(--color-accent)}
+nav.wide{display:none;gap:22px;font-size:13px}
+@media (min-width:880px){nav.wide{display:flex}}
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1px;background:var(--color-divider);border:1px solid var(--color-divider);border-radius:var(--radius-md);overflow:hidden}
+.grid-cards>div{background:var(--color-bg);padding:20px 18px;display:flex;flex-direction:column;gap:7px}
+.label{margin:0;font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:36px;align-items:start;margin-top:20px}
+.refuses{list-style:none;margin:0;padding:0}
+.refuses li{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:baseline;padding:18px 0;border-top:1px solid var(--color-divider)}
+</style>
+</head>
+<body>
+
+<header style="position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:color-mix(in srgb, var(--color-bg) 88%, transparent);border-bottom:1px solid var(--color-divider)">
+  <div style="max-width:1080px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:24px">
+    <a href="#top" style="font-family:var(--font-mono);font-weight:500;font-size:17px;letter-spacing:-0.02em;text-decoration:none;color:var(--color-text);margin-right:auto;display:flex;align-items:center;gap:9px">
+      <span style="width:9px;height:9px;background:var(--color-accent);display:block;border-radius:2px"></span>nyrvo
+    </a>
+    <nav class="wide">
+      <a class="navlink" href="#observes" data-i18n="navObserves"></a>
+      <a class="navlink" href="#ci" data-i18n="navCi"></a>
+      <a class="navlink" href="#ai" data-i18n="navAi"></a>
+      <a class="navlink" href="#refuses" data-i18n="navRefuses"></a>
+    </nav>
+    <div class="seg" role="group" aria-label="Language">
+      <label class="seg-opt"><input type="radio" name="lang" value="en"><span>EN</span></label>
+      <label class="seg-opt"><input type="radio" name="lang" value="pt"><span>PT-BR</span></label>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="wrap" style="padding-top:72px;padding-bottom:64px">
+    <p style="font-family:var(--font-mono);font-size:12px;letter-spacing:0.06em;color:var(--term-dim);margin:0 0 28px">MIT · v0.1.1 · <span data-i18n="heroKicker"></span></p>
+    <h1 style="font-size:clamp(34px,6.2vw,60px);line-height:1.05;letter-spacing:-0.03em;max-width:16ch" data-i18n="heroTitle"></h1>
+    <p style="margin:28px 0 0;max-width:60ch;font-size:clamp(16px,2.2vw,18px);line-height:1.65;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)" data-i18n="heroLede"></p>
+
+    <div style="margin-top:40px;max-width:660px">
+      <p style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--term-dim);margin:0 0 8px" data-i18n="installLabel"></p>
+      <div style="display:flex;align-items:stretch;border:1px solid var(--color-divider);border-radius:var(--radius-md);background:var(--color-surface);overflow:hidden">
+        <code class="scrollx" style="font-family:var(--font-mono);font-size:13px;padding:14px 16px;white-space:nowrap;flex:1;min-width:0;line-height:1.4"><span class="dim">$ </span>go install github.com/nyrvo-dev/nyrvo/cmd/nyrvo@latest</code>
+        <button type="button" id="copy" style="flex:none;font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;padding:0 16px;min-height:44px;cursor:pointer;background:transparent;border:0;border-left:1px solid var(--color-divider);color:var(--color-accent)"></button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:20px;margin-top:20px">
+        <a class="btn" href="https://github.com/nyrvo-dev/nyrvo"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>github.com/nyrvo-dev/nyrvo</a>
+        <span style="font-size:13px;color:var(--term-dim)" data-i18n="heroPlatforms"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="output">
+    <p class="kicker">02</p>
+    <h2 data-i18n="s2Title"></h2>
+    <p class="lede" data-i18n="s2Body"></p>
+
+    <div class="term">
+      <div class="term-bar"><span style="width:6px;height:6px;border-radius:50%;background:var(--color-accent);display:block"></span>nyrvo doctor</div>
+      <div class="scrollx" style="padding:20px 16px"><pre><span class="dim">$ </span>nyrvo doctor 31977625066
+
+<span style="letter-spacing:0.14em;color:var(--color-accent)">NYRVO DOCTOR
+</span>
+<span class="dim">local vs ci</span>
+
+<span class="dim" style="letter-spacing:0.1em">WHAT THE EVIDENCE REPORTS
+</span>
+  The run concluded with failure.
+  The job Lint concluded with failure.
+  The job failed at step "golangci-lint".
+  The job ran on runner image ubuntu-24.04 version 20260810.271.1.
+  <span class="dim">Log:</span> invalid version string 'v2.12.2', golangci-lint v2 is not
+       supported by golangci-lint-action v6
+
+<span class="sev">MEDIUM</span>
+
+  <span class="key">git.sha_mismatch</span>  sha
+    <span class="dim">expected</span>  7f6b1fe5d11f5a7251b478097e09a6d30117d86e
+    <span class="dim">actual</span>    98fa1a416be6fd11997f568bcb23702c5a1292fe
+    local and ci are not running the same commit, which makes every
+    other comparison harder to trust.
+
+<span class="dim">  … three low findings omitted here</span>
+
+<span class="dim">4 findings: 1 medium, 3 low</span></pre></div>
+    </div>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--term-dim);max-width:62ch" data-i18n="s2Note"></p>
+  </section>
+
+  <section class="wrap" id="observes">
+    <p class="kicker">03</p>
+    <h2 data-i18n="s3Title"></h2>
+    <p class="lede" data-i18n="s3Body"></p>
+    <div class="grid-cards" id="observesGrid"></div>
+  </section>
+
+  <section class="wrap" id="ci">
+    <p class="kicker">04</p>
+    <h2 style="max-width:22ch" data-i18n="s4Title"></h2>
+    <div class="two">
+      <div>
+        <p style="margin:0 0 14px;max-width:56ch;line-height:1.65;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)" data-i18n="s4BodyA"></p>
+        <p style="margin:0 0 14px;max-width:56ch;line-height:1.65;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)" data-i18n="s4BodyB"></p>
+        <p style="margin:0;font-family:var(--font-mono);font-size:13px;color:var(--term-key)">nyrvo ci replay &lt;job&gt;</p>
+      </div>
+      <div class="term">
+        <div class="term-bar" data-i18n="s4TermLabel"></div>
+        <div class="scrollx" style="padding:18px 16px"><pre><span class="key">service.missing</span>  postgres
+  <span class="dim">expected</span>  postgres:16
+  <span class="dim">actual</span>    no matching running container
+  The job ci declares the service postgres:16, but local's running
+  containers include no image named postgres.</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="ai">
+    <p class="kicker">05</p>
+    <h2 style="max-width:24ch" data-i18n="s5Title"></h2>
+    <div class="two">
+      <div>
+        <p style="margin:0 0 14px;line-height:1.65;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)" data-i18n="s5BodyA"></p>
+        <p style="margin:0;line-height:1.65;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)" data-i18n="s5BodyB"></p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1px;background:var(--color-divider);border:1px solid var(--color-divider);border-radius:var(--radius-md);overflow:hidden">
+        <div style="background:var(--color-bg);padding:16px 18px">
+          <p style="margin:0 0 6px;font-family:var(--font-mono);font-size:13px;color:var(--term-key)">nyrvo doctor --ai</p>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:color-mix(in srgb, var(--color-text) 75%, transparent)" data-i18n="s5FlagA"></p>
+        </div>
+        <div style="background:var(--color-bg);padding:16px 18px">
+          <p style="margin:0 0 6px;font-family:var(--font-mono);font-size:13px;color:var(--term-key)">--agent=claude|codex|opencode</p>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:color-mix(in srgb, var(--color-text) 75%, transparent)" data-i18n="s5FlagB"></p>
+        </div>
+        <div style="background:var(--color-bg);padding:16px 18px">
+          <p class="label" style="margin:0 0 6px" data-i18n="s5SepLabel"></p>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:color-mix(in srgb, var(--color-text) 75%, transparent)" data-i18n="s5SepBody"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="refuses">
+    <p class="kicker">06</p>
+    <h2 data-i18n="s6Title"></h2>
+    <p class="lede" data-i18n="s6Body"></p>
+    <ul class="refuses" id="refusesList"></ul>
+  </section>
+
+  <section class="wrap" id="cloud" style="padding-bottom:24px">
+    <p class="kicker">07</p>
+    <h2 data-i18n="s7Title"></h2>
+    <p style="margin:16px 0 12px;max-width:62ch;font-size:clamp(15px,2vw,17px);line-height:1.65;text-wrap:pretty" data-i18n="s7NotBuilt"></p>
+    <p class="lede" style="margin-bottom:32px" data-i18n="s7Frame"></p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px" id="ideasGrid"></div>
+    <p class="lede" style="margin:32px 0 0" data-i18n="s7NoSignup"></p>
+    <p style="margin:12px 0 0"><a class="btn" href="https://github.com/nyrvo-dev/nyrvo/releases"><svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><span data-i18n="s7WatchButton"></span></a></p>
+  </section>
+</main>
+
+<footer style="margin-top:48px;border-top:1px solid var(--color-divider)">
+  <div style="max-width:1080px;margin:0 auto;padding:28px 24px 48px;display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;font-size:13px;color:var(--term-dim)">
+    <span style="font-family:var(--font-mono);color:var(--color-text)">nyrvo</span>
+    <a href="https://github.com/nyrvo-dev/nyrvo" style="text-decoration:none">GitHub</a>
+    <a href="https://github.com/nyrvo-dev/nyrvo/blob/main/SECURITY.md" style="text-decoration:none" data-i18n="footerSecurity"></a>
+    <span>MIT</span>
+    <span>v0.1.1</span>
+    <span style="margin-left:auto"><span data-i18n="footerCreatedBy"></span> <a href="https://github.com/lucascnunes" style="text-decoration:none">@lucascnunes</a></span>
+  </div>
+</footer>
+
+<script>
+const COPY = {
+  en: {
+    navObserves:"What it observes", navCi:"CI", navAi:"AI", navRefuses:"What it refuses",
+    heroKicker:"one Go binary",
+    heroTitle:"Your code is the same. Your environment is not.",
+    heroLede:"The suite passes on your laptop and fails in CI. You read the diff twice and it explains nothing, because the difference is not in the code. Nyrvo captures an execution environment as a small JSON snapshot, compares two of them, and reports what actually differs.",
+    installLabel:"Install",
+    heroPlatforms:"Verified on Linux, macOS and Windows.",
+    copyIdle:"Copy", copyDone:"Copied",
+    s2Title:"What it looks like",
+    s2Body:"One command, pointed at a CI run that failed. The evidence section comes first, because a run's own report — the step that failed, the line from the log — often explains more than any comparison of environments can.",
+    s2Note:"Real output from v0.1.1, against this project's own CI. Three low findings are elided where marked; nothing else is edited, and no number here is illustrative.",
+    s3Title:"What it observes",
+    s3Body:"A snapshot is a small JSON file. It records facts about the machine, not the contents of your work.",
+    observes:[
+      ["System","Operating system, architecture, kernel version."],
+      ["Git","Commit, branch, and whether the working tree is dirty."],
+      ["Toolchains","Go, npm, Node, Python, Ruby, PHP, Rust and Java — versions and install paths."],
+      ["Docker","Client, server and compose versions, and whether the daemon answers at all."],
+      ["Containers","The images of the containers currently running."],
+      ["Declared constraints","The version requirements the project itself states, in the files that state them."],
+      ["Environment","The names of environment variables. Never their values."]
+    ],
+    s4Title:"It reads your CI. It does not run it.",
+    s4BodyA:"Nyrvo parses GitHub Actions workflows and imports runs that actually happened, through the gh CLI you already installed and authenticated. It holds no GitHub token of its own.",
+    s4BodyB:"nyrvo ci replay <job> prints what a job does, step by step, and marks the steps that cannot be reproduced locally. It executes none of them.",
+    s4TermLabel:"a job's service, judged against this machine",
+    s5Title:"The AI layer is opt-in, and it uses your agent.",
+    s5BodyA:"Nyrvo owns no API keys and picks no vendor. If you have never asked for it, no model is involved at any point.",
+    s5BodyB:"The agent runs in an empty temporary directory, so it reasons about the evidence it was given rather than rummaging through your machine.",
+    s5FlagA:"Builds an analysis request from the snapshot diff and prints it. Nothing is sent.",
+    s5FlagB:"Hands that request to a CLI you already installed and authenticated yourself.",
+    s5SepLabel:"Kept apart",
+    s5SepBody:"Deterministic findings are printed above the model's, under their own heading. Model inference is never presented as observed fact.",
+    s6Title:"What it refuses to do",
+    s6Body:"Nyrvo's identity is refusing to claim what it has not verified. In practice that is a list of things it will not do, and the list is short on purpose.",
+    refuses:[
+      "It never records the values of environment variables — only their names.",
+      "It never runs a shell. External tools receive an argument vector.",
+      "It owns no credentials: not for GitHub, not for any AI vendor.",
+      "It never executes a workflow's steps.",
+      "It never presents model output as observed fact.",
+      "It reports nothing when the evidence cannot decide. A constraint it cannot fully read produces no finding, rather than a guess."
+    ],
+    s7Title:"Coming later: Nyrvo Cloud",
+    s7NotBuilt:"None of this is built. There is no beta, no waitlist and no date.",
+    s7Frame:"The CLI answers why two environments differ, right now. It structurally cannot answer when something changed, or who else has it. That is what a service would add.",
+    ideas:[
+      ["History","Runner images change without telling anyone. Keeping snapshots over time turns silent drift into a dated event: CI moved from Node 22.11 to 22.12 on the 14th."],
+      ["Environment bisect","The suite went red on the 14th. Here is every environment change between the last green run and the first red one."],
+      ["Team baseline","Whether everyone is on the toolchain the project declares. Onboarding becomes one command instead of an afternoon. Environment variable values were never captured, so there is nothing to upload and nothing to leak."]
+    ],
+    s7NoSignup:"There is no email field here, because there is nothing yet to email you about, and a form that quietly discards an address would be the only dishonest thing on this page. Watch the repository instead — the release will show up there first, and you can leave whenever you like.",
+    s7WatchButton:"Watch releases on GitHub",
+    footerSecurity:"Security", footerCreatedBy:"Created by"
+  },
+  pt: {
+    navObserves:"O que ele observa", navCi:"CI", navAi:"IA", navRefuses:"O que ele recusa",
+    heroKicker:"um binário Go",
+    heroTitle:"Seu código é o mesmo. Seu ambiente não é.",
+    heroLede:"A suíte passa no seu notebook e falha no CI. Você lê o diff duas vezes e ele não explica nada, porque a diferença não está no código. O Nyrvo captura um ambiente de execução como um pequeno snapshot JSON, compara dois deles e relata o que de fato difere.",
+    installLabel:"Instalação",
+    heroPlatforms:"Verificado em Linux, macOS e Windows.",
+    copyIdle:"Copiar", copyDone:"Copiado",
+    s2Title:"Como isso aparece",
+    s2Body:"Um comando, apontado para uma execução do CI que falhou. A seção de evidências vem primeiro, porque o relato da própria execução — o passo que falhou, a linha do log — costuma explicar mais do que qualquer comparação de ambientes.",
+    s2Note:"Saída real da v0.1.1, contra o CI deste próprio projeto. Três achados de severidade baixa foram omitidos onde está marcado; nada mais foi editado, e nenhum número aqui é ilustrativo.",
+    s3Title:"O que ele observa",
+    s3Body:"Um snapshot é um pequeno arquivo JSON. Ele registra fatos sobre a máquina, não o conteúdo do seu trabalho.",
+    observes:[
+      ["Sistema","Sistema operacional, arquitetura, versão do kernel."],
+      ["Git","Commit, branch e se a árvore de trabalho está dirty."],
+      ["Toolchains","Go, npm, Node, Python, Ruby, PHP, Rust e Java — versões e caminhos de instalação."],
+      ["Docker","Versões de client, server e compose, e se o daemon responde."],
+      ["Containers","As imagens dos containers em execução no momento."],
+      ["Restrições declaradas","Os requisitos de versão que o próprio projeto declara, nos arquivos que os declaram."],
+      ["Ambiente","Os nomes das variáveis de ambiente. Nunca os valores."]
+    ],
+    s4Title:"Ele lê seu CI. Ele não executa seu CI.",
+    s4BodyA:"O Nyrvo faz o parsing de workflows do GitHub Actions e importa execuções que realmente aconteceram, através do gh CLI que você já instalou e autenticou. Ele não guarda token do GitHub próprio.",
+    s4BodyB:"nyrvo ci replay <job> imprime o que um job faz, passo a passo, e marca os passos que não podem ser reproduzidos localmente. Ele não executa nenhum deles.",
+    s4TermLabel:"um serviço do job, avaliado contra esta máquina",
+    s5Title:"A camada de IA é opcional e usa o seu agente.",
+    s5BodyA:"O Nyrvo não possui chaves de API e não escolhe fornecedor. Se você nunca pediu, nenhum modelo entra em cena em momento algum.",
+    s5BodyB:"O agente roda em um diretório temporário vazio, então ele raciocina sobre a evidência que recebeu em vez de vasculhar a sua máquina.",
+    s5FlagA:"Monta um pedido de análise a partir da diferença entre snapshots e o imprime. Nada é enviado.",
+    s5FlagB:"Entrega esse pedido a um CLI que você mesmo já instalou e autenticou.",
+    s5SepLabel:"Mantido à parte",
+    s5SepBody:"Os achados determinísticos são impressos acima dos do modelo, sob um título próprio. Inferência de modelo nunca é apresentada como fato observado.",
+    s6Title:"O que ele se recusa a fazer",
+    s6Body:"A identidade do Nyrvo é recusar-se a afirmar o que não verificou. Na prática, isso é uma lista de coisas que ele não faz — e a lista é curta de propósito.",
+    refuses:[
+      "Nunca registra os valores das variáveis de ambiente — apenas os nomes.",
+      "Nunca executa um shell. Ferramentas externas recebem um vetor de argumentos.",
+      "Não possui credenciais: nem do GitHub, nem de nenhum fornecedor de IA.",
+      "Nunca executa os passos de um workflow.",
+      "Nunca apresenta a saída de um modelo como fato observado.",
+      "Não relata nada quando a evidência não decide. Uma restrição que ele não consegue ler por completo não gera achado nenhum, em vez de gerar um palpite."
+    ],
+    s7Title:"Mais adiante: Nyrvo Cloud",
+    s7NotBuilt:"Nada disso está construído. Não há beta, não há lista de espera e não há data.",
+    s7Frame:"O CLI responde por que dois ambientes diferem, agora. Ele estruturalmente não consegue responder quando algo mudou, nem quem mais tem aquilo. É isso que um serviço acrescentaria.",
+    ideas:[
+      ["Histórico","Imagens de runner mudam sem avisar ninguém. Guardar snapshots ao longo do tempo transforma a deriva silenciosa em um evento com data: o CI passou de Node 22.11 para 22.12 no dia 14."],
+      ["Bisect de ambiente","A suíte ficou vermelha no dia 14. Aqui está toda mudança de ambiente entre a última execução verde e a primeira vermelha."],
+      ["Baseline do time","Se todo mundo está na toolchain que o projeto declara. Onboarding vira um comando em vez de uma tarde. E os valores das variáveis de ambiente nunca foram capturados, então não há o que subir nem o que vazar."]
+    ],
+    s7NoSignup:"Não há campo de e-mail aqui, porque ainda não há sobre o que te avisar — e um formulário que descarta o endereço em silêncio seria a única coisa desonesta desta página. Acompanhe o repositório: o lançamento aparece lá primeiro, e você sai quando quiser.",
+    s7WatchButton:"Acompanhar lançamentos no GitHub",
+    footerSecurity:"Segurança", footerCreatedBy:"Criado por"
+  }
+};
+
+function render(lang) {
+  const t = COPY[lang];
+  document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t[el.dataset.i18n];
+  });
+  document.getElementById("copy").textContent = t.copyIdle;
+
+  document.getElementById("observesGrid").innerHTML = t.observes.map(
+    ([label, body]) => `<div><p class="label">${label}</p><p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)">${body}</p></div>`
+  ).join("");
+
+  document.getElementById("refusesList").innerHTML = t.refuses.map(
+    (text, i) => `<li><span style="font-family:var(--font-mono);font-size:12px;color:var(--color-accent)">0${i + 1}</span><span style="font-size:clamp(15px,2vw,17px);line-height:1.6;text-wrap:pretty;max-width:64ch">${text}</span></li>`
+  ).join("");
+
+  document.getElementById("ideasGrid").innerHTML = t.ideas.map(
+    ([title, body]) => `<div class="card"><p class="label">${title}</p><p style="margin:0;font-size:14px;line-height:1.6;text-wrap:pretty;color:color-mix(in srgb, var(--color-text) 82%, transparent)">${body}</p></div>`
+  ).join("");
+
+  document.querySelector(`input[name="lang"][value="${lang}"]`).checked = true;
+  try { localStorage.setItem("nyrvo.lang", lang); } catch (e) {}
+}
+
+let stored = null;
+try { stored = localStorage.getItem("nyrvo.lang"); } catch (e) {}
+render(stored === "pt" || stored === "en"
+  ? stored
+  : ((navigator.language || "en").toLowerCase().indexOf("pt") === 0 ? "pt" : "en"));
+
+document.querySelectorAll('input[name="lang"]').forEach(input => {
+  input.addEventListener("change", () => render(input.value));
+});
+
+document.getElementById("copy").addEventListener("click", function () {
+  const cmd = "go install github.com/nyrvo-dev/nyrvo/cmd/nyrvo@latest";
+  const lang = document.documentElement.lang === "pt-BR" ? "pt" : "en";
+  const done = () => {
+    this.textContent = COPY[lang].copyDone;
+    clearTimeout(this._t);
+    this._t = setTimeout(() => { this.textContent = COPY[lang].copyIdle; }, 2000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd).then(done, done);
+  } else { done(); }
+});
+</script>
+</body>
+</html>
